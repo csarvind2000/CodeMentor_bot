@@ -22,6 +22,19 @@ Under the hood, three agents manage the workflow:
 
 ---
 
+## 🖼️ Example Output
+
+<p align="center">
+  <img src="images/figure1.png" alt="Code Generation Example" width="45%" style="margin-right: 10px;"/>
+  <img src="images/figure2.png" alt="Comment Generation Example" width="45%"/>
+</p>
+
+<p align="center">
+  <strong>Left:</strong> Code Generation &nbsp;&nbsp;&nbsp;&nbsp; <strong>Right:</strong> Comment Generation
+</p>
+
+
+
 ## 🔧 Installation & Setup
 
 1. **Clone the repository**  

@@ -1,65 +1,84 @@
-CodeMentor: Agent-Driven Code Commenting and Generation
-Overview
+# CodeMentor: Agent-Driven Code Commenting and Generation
 CodeMentor is a web-based tool that uses AI agents to automatically add detailed comments to Python and JavaScript code and generate new code based on user requests. It leverages large language models (LLMs) via Ollama and provides a user-friendly interface built with Gradio.
 
-Comment Code: Upload a .py or .js file or paste code to add inline comments for every line (reStructuredText for Python, JSDoc for JavaScript).
-Generate Code: Request Python or JavaScript code generation with detailed comments included.
+## 📋 Table of Contents
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Setup Instructions](#setup-instructions)
+- [Usage](#usage)
+  - [Comment Code](#comment-code)
+  - [Generate Code](#generate-code)
+- [Example Inputs and Outputs](#example-inputs-and-outputs)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
-Prerequisites
+## 🧠 Overview
+CodeMentor offers two main features:
 
-Python: Version 3.8 or higher.
-Ollama: For running the LLaMA 3 model locally.
-Operating System: Tested on Linux (Ubuntu 20.04+), but should work on macOS and Windows with adjustments.
+- ✅ **Comment Code:** Add inline comments to every line of Python or JavaScript code using LLMs (reStructuredText for Python, JSDoc for JavaScript).
+- 🚀 **Generate Code:** Generate Python or JavaScript code with descriptive inline comments based on user instructions.
 
-Setup Instructions
-1. Clone the Repository
+Built using:
+- 🧠 **Ollama** for local LLaMA 3 model inference
+- 🌐 **Gradio** for a simple web-based UI
+
+## ⚙️ Prerequisites
+- **Python:** 3.8 or higher
+- **Ollama:** Installed and running for LLaMA 3 model
+- **Operating System:** Tested on Linux (Ubuntu 20.04+). Should also work on macOS and Windows with minor tweaks.
+
+## 🛠️ Setup Instructions
+### 1. Clone the Repository
+```bash
 git clone <repository-url>
 cd code_comment_bot
+```
 
-2. Install Ollama
-Follow these steps to install and run Ollama on Linux (adjust for other OS as needed):
-# Install Ollama
+### 2. Install Ollama
+```bash
 curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull the LLaMA 3 model
 ollama pull llama3
-
-# Start the Ollama server
 ollama serve
+```
 
-3. Install Dependencies
-Create a virtual environment and install the required Python packages:
+### 3. Install Python Dependencies
+```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+```
 
-4. Run the Application
+### 4. Run the Application
+```bash
 python app.py
+```
 
+Open the Gradio URL (http://127.0.0.1:7860) in your browser.
 
-Open the provided Gradio URL (e.g., http://127.0.0.1:7860) in your browser.
-The app has two tabs: "Comment Code" and "Generate Code".
+## 💡 Usage
+### 📝 Comment Code
+1. Upload a `.py` or `.js` file, or paste code.
+2. Optionally provide filename and a custom prompt.
+3. Click **Add Comments** to annotate the code.
+4. Download or view the commented output.
 
-Usage
-Comment Code
+### 🧾 Generate Code
+1. Enter a code request prompt.
+2. Select Python or JavaScript.
+3. Click **Generate Code**.
+4. Download or view the generated code.
 
-Upload a File or Paste Code:
-In the "Comment Code" tab, either upload a .py or .js file or paste your code in the "Or Paste Code" textbox.
-Optionally specify a filename (e.g., script.py) and a custom prompt for commenting.
-
-
-Add Comments:
-Click the "Add Comments" button.
-View the commented code in the "Commented Code" textbox and download the file (e.g., commented_script.py).
-
-
-
-Example Input:
+## 🧪 Example Inputs and Outputs
+### Comment Code
+**Input:**
+```javascript
 function greet(name) {
     return `Hello, ${name}!`;
 }
+```
 
-Sample Output (commented_greet.js):
+**Output:**
+```javascript
 /**
  * Module for greeting users.
  */
@@ -69,25 +88,16 @@ Sample Output (commented_greet.js):
  * @returns {string} A greeting message.
  */
 function greet(name) {
-    // Constructs and returns a greeting string using template literal
+    // Constructs and returns a greeting string using a template literal.
     return `Hello, ${name}!`;
 }
+```
 
-Generate Code
+### Generate Code
+**Prompt:** Write a Python function to sort a list
 
-Request Code:
-In the "Generate Code" tab, enter a code request (e.g., "Write a Python function to sort a list").
-Select the file type (Python or JavaScript).
-
-
-Generate Code:
-Click the "Generate Code" button.
-View the generated code in the "Generated Code" textbox and download the file (e.g., generated_code.py).
-
-
-
-Example Request: "Write a Python function to sort a list"
-Sample Output (generated_code.py):
+**Output:**
+```python
 """
 Module for sorting lists.
 """
@@ -101,28 +111,27 @@ def sort_list(numbers: list) -> list:
     :returns: Sorted list in ascending order.
     :rtype: list
     """
-    # Creates a new sorted list using the sorted() function
+    # Create a new sorted list using the sorted() function.
     sorted_numbers = sorted(numbers)
-    # Returns the sorted list
+    # Return the sorted list.
     return sorted_numbers
+```
 
-Troubleshooting
+## 🛠️ Troubleshooting
+- **Ollama Not Running:**
+  ```bash
+  ollama serve
+  lsof -i :11434  # Check port
+  ```
+- **Gradio App Not Opening:** Try a different browser or incognito.
+- **Dependency Issues:**
+  ```bash
+  source venv/bin/activate
+  pip install -r requirements.txt
+  ```
 
-Ollama Not Running:
-Ensure the Ollama server is running (ollama serve).
-Check for port conflicts on 11434: lsof -i :11434 and kill conflicting processes if needed.
+## 📄 License
+This project is licensed under the **MIT License**.
 
-
-Gradio URL Not Accessible:
-Verify the app is running and check for port conflicts on 7860.
-Try accessing the app in a different browser or in incognito mode.
-
-
-Dependencies Issues:
-Ensure you're in the virtual environment (source venv/bin/activate).
-Reinstall dependencies: pip install -r requirements.txt.
-
-
-
-License
-This project is licensed under the MIT License.
+---
+🌟 Built with love and LLaMA.

@@ -1,0 +1,37 @@
+Here is the modified code with added docstrings in reStructuredText format for Python:
+
+```python
+def add(a: int, b: int) -> int:
+    """
+    Adds two integers together.
+
+    Args:
+        a (int): The first integer to add.
+        b (int): The second integer to add.
+
+    Returns:
+        int: The sum of the two input integers.
+    """
+    return a + b
+
+class Calculator:
+    """
+    A simple calculator class with basic arithmetic operations.
+    """
+
+    def multiply(self, x: float, y: float) -> float:
+        """
+        Multiplies two floating-point numbers together.
+
+        Args:
+            self: The current instance of the Calculator class.
+            x (float): The first number to multiply.
+            y (float): The second number to multiply.
+
+        Returns:
+            float: The product of the two input numbers.
+        """
+        return x * y
+```
+
+Let me know if you'd like me to modify anything or add more docstrings!

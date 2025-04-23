@@ -1,286 +1,223 @@
+import requests
 import gradio as gr
 import os
-from pathlib import Path
-from agents import FileTypeAgent, CommentAgent, CodeGenAgent
+import tempfile
+import re
+import logging
 
-# Setup directories
-UPLOAD_FOLDER = 'uploads'
-OUTPUT_FOLDER = 'output'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+# ————— Agent Definitions —————
+class FileTypeAgent:
+    """
+    Determines file type (python/javascript) based on filename or code content.
+    """
+    def detect_file_type(self, filename: str, code: str) -> str:
+        ext = os.path.splitext(filename)[1].lower()
+        if ext == '.py':
+            return 'python'
+        if ext == '.js':
+            return 'javascript'
+        # fallback: inspect content
+        if 'def ' in code:
+            return 'python'
+        return 'javascript'
 
-# Initialize agents
+class CommentAgent:
+    """
+    Wraps Ollama-based commenting logic.
+    """
+    def __init__(self, api_url: str, model: str):
+        self.api_url = api_url
+        self.model   = model
+
+    def generate_comments(self, code: str, language: str) -> str:
+        return _generate_comments(code, language)
+
+class CodeGenAgent:
+    """
+    Wraps Ollama-based code-generation logic.
+    """
+    def __init__(self, api_url: str, model: str):
+        self.api_url = api_url
+        self.model   = model
+
+    def generate_code(self, request: str, language: str) -> str:
+        return _generate_code_with_comments(request, language)
+
+# ————— Ollama Wrappers —————
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+OLLAMA_MODEL    = "llama3:latest"
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Helper to strip markdown code fences
+
+def _strip_code_fences(text: str) -> str:
+    text = text.strip()
+    # Match fenced code block
+    if text.startswith("```"):
+        # remove all leading ``` lines
+        lines = text.splitlines()
+        # drop first line
+        lines = lines[1:]
+        # if last line is ``` drop it
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines)
+    return text
+
+
+def check_ollama_server():
+    try:
+        r = requests.get("http://localhost:11434/api/tags", timeout=5)
+        r.raise_for_status()
+        return True, ""
+    except Exception as e:
+        logging.error("Ollama server check failed", exc_info=e)
+        return False, str(e)
+
+
+def call_chat_api(system_prompt: str, user_content: str) -> str:
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_content}
+        ],
+        "stream": False
+    }
+    r = requests.post(OLLAMA_CHAT_URL, json=payload, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    return data.get("message", {}).get("content", "").strip()
+
+
+def _generate_comments(code: str, language: str) -> str:
+    ok, err = check_ollama_server()
+    if not ok:
+        return f"# Error: cannot reach Ollama: {err}\n{code}"
+
+    system = (
+        "You are an expert Python programmer. "
+        if language.lower() == 'python' else
+        "You are an expert JavaScript programmer. "
+    )
+    system += (
+        "Add Google-style docstrings (Args/Returns) and inline comments (# …). "
+        if language.lower() == 'python' else
+        "Add JSDoc docstrings (@param/@returns) and inline comments (// …). "
+    )
+    system += "Do NOT change code structure—output ONLY the commented code."
+
+    try:
+        raw = call_chat_api(system, code)
+        out = _strip_code_fences(raw).strip()
+        if not out or out == code.strip():
+            return f"# Error: Ollama returned no changes.\n{code}"
+        return out
+    except Exception as e:
+        logging.error("Error in commenting API", exc_info=e)
+        return f"# Error generating comments: {e}\n{code}"
+
+
+def _generate_code_with_comments(request: str, language: str) -> str:
+    ok, err = check_ollama_server()
+    if not ok:
+        return f"# Error: cannot reach Ollama: {err}"
+
+    system = (
+        "You are an expert Python programmer. "
+        if language.lower() == 'python' else
+        "You are an expert JavaScript programmer. "
+    )
+    if language.lower() == 'python':
+        system += (
+            "Generate code for the request, add Google-style docstrings and inline comments (# …). "
+            "Output ONLY the commented code."
+        )
+    else:
+        system += (
+            "Generate code for the request, add JSDoc docstrings (@param/@returns) and inline comments (// …). "
+            "Output ONLY the commented code."
+        )
+
+    try:
+        raw = call_chat_api(system, request)
+        return _strip_code_fences(raw).strip()
+    except Exception as e:
+        logging.error("Error in generation API", exc_info=e)
+        return f"# Error generating code: {e}"
+
+# ————— Gradio Interface —————
 file_type_agent = FileTypeAgent()
-comment_agent = CommentAgent()
-code_gen_agent = CodeGenAgent()
+comment_agent   = CommentAgent(OLLAMA_CHAT_URL, OLLAMA_MODEL)
+code_agent      = CodeGenAgent(  OLLAMA_CHAT_URL, OLLAMA_MODEL)
 
-def comment_code(file, code_input, filename, custom_prompt):
-    """Process uploaded file or pasted code and add comments."""
-    code = ""
+
+def process_comment_only(file, code_input, language):
     if file:
-        filename = os.path.basename(file.name)
-        with open(file.name, 'r') as f:
-            code = f.read()
-    elif code_input:
-        code = code_input
-        filename = filename or ('code.py' if 'def ' in code or 'class ' in code else 'code.js')
+        try:
+            src = open(file.name, 'r', encoding='utf-8').read()
+            name = os.path.splitext(os.path.basename(file.name))[0] + "_commented"
+        except Exception as e:
+            return f"Error reading file: {e}", None
+    elif code_input and code_input.strip():
+        src   = code_input
+        match = re.search(r'(?:def|function)\s+(\w+)', src)
+        name  = match.group(1) if match else "commented_code"
+    else:
+        return "Please upload a file or type code.", None
 
-    # Detect file type
-    file_type = file_type_agent.detect_file_type(filename, code)
+    file_lang = file_type_agent.detect_file_type(name, src)
+    commented  = comment_agent.generate_comments(src, file_lang)
+    return commented, name
 
-    # Generate comments
-    commented_code = comment_agent.generate_comments(code, file_type, custom_prompt or None)
 
-    # Determine output filename with correct extension
-    extension = '.py' if file_type == 'python' else '.js'
-    base_name = os.path.splitext(filename)[0] if filename else 'code'
-    output_filename = f"commented_{base_name}{extension}"
-    output_path = os.path.join(OUTPUT_FOLDER, output_filename)
-    with open(output_path, 'w') as f:
-        f.write(commented_code)
+def process_generate_code(request_input, language):
+    if not (request_input and request_input.strip()):
+        return "Please provide a request.", None
+    gen   = code_agent.generate_code(request_input, language.lower())
+    match = re.search(r'(?:def|function)\s+(\w+)', gen)
+    name  = match.group(1) if match else "generated_code"
+    return gen, name
 
-    return (
-        commented_code,
-        output_path,
-        f"Download commented file: {output_filename}"
+
+def create_download_file(text, language, base):
+    ext  = '.py' if language.lower()=='python' else '.js'
+    safe = re.sub(r'[^0-9A-Za-z_]', '_', base)
+    tmp  = tempfile.NamedTemporaryFile(mode='w', prefix=safe+'_', suffix=ext, delete=False, encoding='utf-8')
+    tmp.write(text)
+    tmp.close()
+    return tmp.name
+
+custom_css = """
+.gradio-container { font-family:Arial; max-width:1400px; margin:auto; }
+.gr-button { background:#3498db !important; color:#fff !important; }
+"""
+
+with gr.Blocks(theme=gr.themes.Soft(), css=custom_css) as app:
+    gr.Markdown("# CodeMentor: Agent-Driven Code Commenting and Generation", elem_classes=["header"])
+    with gr.Row():
+        with gr.Column():
+            file_in  = gr.File(file_types=['.py','.js'], label="Upload Code File")
+            lang_sel = gr.Dropdown(['Python','JavaScript'], value='Python', label="Language")
+            req_box  = gr.Textbox(label="Request Code (Prompt generation)", lines=2)
+            code_box = gr.Code(label="Or Type Code to Comment", language="python", lines=10)
+            with gr.Row():
+                btn_gen = gr.Button("Generate Code")
+                btn_com = gr.Button("Comment Only")
+        with gr.Column():
+            out_code = gr.Code(label="Output", language="python", lines=15, interactive=False)
+            download = gr.File(label="Download")
+
+    btn_gen.click(
+        fn=lambda req, lang: (lambda text, base: (text, create_download_file(text, lang, base)))(*process_generate_code(req, lang)),
+        inputs=[req_box, lang_sel],
+        outputs=[out_code, download]
+    )
+    btn_com.click(
+        fn=lambda f, c, l: (lambda text, base: (text, create_download_file(text, l, base)))(*process_comment_only(f, c, l)),
+        inputs=[file_in, code_box, lang_sel],
+        outputs=[out_code, download]
     )
 
-def generate_code(request, file_type):
-    """Generate code based on user request."""
-    code = code_gen_agent.generate_code(request, file_type.lower())
-    
-    # Determine output filename
-    extension = '.py' if file_type.lower() == 'python' else '.js'
-    output_filename = f"generated_code{extension}"
-    output_path = os.path.join(OUTPUT_FOLDER, output_filename)
-    with open(output_path, 'w') as f:
-        f.write(code)
-
-    return (
-        code,
-        output_path,
-        f"Download generated file: {output_filename}"
-    )
-
-# Gradio interface
-with gr.Blocks(css="""
-    body {
-        font-family: 'Inter', sans-serif;
-        background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
-        color: #1A237E;
-        margin: 0;
-        padding: 20px;
-        box-sizing: border-box;
-    }
-    .gr-panel {
-        background-color: #BBDEFB;
-        border-radius: 8px;
-        padding: 12px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        border: 1px solid #90CAF9;
-    }
-    .gr-button {
-        background: linear-gradient(135deg, #2196F3, #1976D2);
-        color: white;
-        border: none;
-        border-radius: 6px;
-        padding: 8px 16px;
-        font-size: 14px;
-        cursor: pointer;
-        transition: transform 0.1s, box-shadow 0.2s;
-    }
-    .gr-button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
-    }
-    .gr-textbox, .gr-file, .gr-dropdown {
-        background-color: #FFFFFF;
-        color: #1A237E;
-        border: 1px solid #90CAF9;
-        border-radius: 6px;
-        font-size: 14px;
-    }
-    .gr-textbox textarea {
-        height: 120px !important;
-        resize: none;
-    }
-    .filename-textbox textarea {
-        height: 50px !important;
-        resize: none;
-    }
-    .output-textbox textarea {
-        height: 180px !important;
-        resize: none;
-    }
-    .gr-markdown h1 {
-        font-size: 26px;
-        margin: 0 0 16px;
-        color: #1976D2;
-    }
-    .gr-markdown.description {
-        font-size: 18px !important;
-        margin: 0 0 12px;
-        color: #1976D2;
-    }
-    .gr-tabs {
-        background-color: #BBDEFB;
-        border-radius: 8px;
-        padding: 8px;
-        border: 1px solid #90CAF9;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    .gr-tab {
-        background-color: #90CAF9;
-        color: #1A237E;
-        border-radius: 6px;
-        padding: 8px 16px;
-        margin: 0 4px;
-        transition: background-color 0.2s;
-    }
-    .gr-tab:hover {
-        background-color: #64B5F6;
-    }
-    .gr-tab-selected {
-        background-color: #2196F3;
-        color: white;
-    }
-    .tab-container {
-        display: flex;
-        gap: 16px;
-        height: 560px;
-    }
-    .input-column, .output-column {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-    .input-column {
-        max-width: 50%;
-    }
-    .output-column {
-        max-width: 50%;
-    }
-    .gr-file, .gr-textbox, .gr-dropdown, .gr-button {
-        margin: 0 !important;
-    }
-    .gr-file label, .gr-textbox label, .gr-dropdown label {
-        color: #1976D2;
-        font-weight: 500;
-    }
-    .upload-file {
-        height: 100px !important;
-        width: 80% !important;
-        margin: 0 auto !important;
-    }
-    .upload-file .gr-file-upload {
-        background-color: #E3F2FD;
-        border: 2px dashed #90CAF9;
-        border-radius: 6px;
-        padding: 10px;
-        text-align: center;
-        transition: background-color 0.2s;
-    }
-    .upload-file .gr-file-upload:hover {
-        background-color: #BBDEFB;
-    }
-    @media (max-width: 768px) {
-        .tab-container {
-            flex-direction: column;
-            height: auto;
-        }
-        .input-column, .output-column {
-            max-width: 100%;
-        }
-        .upload-file {
-            width: 100% !important;
-        }
-    }
-""") as demo:
-    gr.Markdown("# CodeMentor: Agent-Driven Code Commenting and Generation")
-    with gr.Tabs():
-        with gr.TabItem("Comment Code"):
-            gr.Markdown(
-                "Upload a .py/.js file or paste code to add comments.",
-                elem_classes=["gr-panel", "description"]
-            )
-            with gr.Row(elem_classes=["tab-container"]):
-                with gr.Column(elem_classes=["input-column"]):
-                    file_input = gr.File(
-                        label="Upload File (.py or .js)",
-                        elem_classes=["gr-file", "upload-file"]
-                    )
-                    code_input = gr.Textbox(
-                        label="Or Paste Code",
-                        lines=5,
-                        elem_classes=["gr-textbox"]
-                    )
-                    filename_input = gr.Textbox(
-                        label="Filename (optional, e.g., script.py)",
-                        lines=2,
-                        elem_classes=["gr-textbox", "filename-textbox"]
-                    )
-                    prompt_input = gr.Textbox(
-                        label="Custom Prompt (optional)",
-                        placeholder="Enter custom prompt for commenting, or leave blank for default.",
-                        lines=2,
-                        elem_classes=["gr-textbox"]
-                    )
-                    comment_button = gr.Button("Add Comments", elem_classes=["gr-button"])
-                with gr.Column(elem_classes=["output-column"]):
-                    output_code = gr.Textbox(
-                        label="Commented Code",
-                        lines=9,
-                        elem_classes=["gr-textbox", "output-textbox"]
-                    )
-                    output_file = gr.File(
-                        label="Download Commented File",
-                        elem_classes=["gr-file"]
-                    )
-                    output_message = gr.Markdown()
-
-            comment_button.click(
-                fn=comment_code,
-                inputs=[file_input, code_input, filename_input, prompt_input],
-                outputs=[output_code, output_file, output_message]
-            )
-
-        with gr.TabItem("Generate Code"):
-            gr.Markdown(
-                "Request code generation for Python or JavaScript.",
-                elem_classes=["gr-panel", "description"]
-            )
-            with gr.Row(elem_classes=["tab-container"]):
-                with gr.Column(elem_classes=["input-column"]):
-                    request_input = gr.Textbox(
-                        label="Code Request",
-                        lines=5,
-                        placeholder="e.g., Write a Python function to sort a list",
-                        elem_classes=["gr-textbox"]
-                    )
-                    file_type_input = gr.Dropdown(
-                        label="File Type",
-                        choices=["Python", "JavaScript"],
-                        value="Python",
-                        elem_classes=["gr-dropdown"]
-                    )
-                    generate_button = gr.Button("Generate Code", elem_classes=["gr-button"])
-                with gr.Column(elem_classes=["output-column"]):
-                    generated_code = gr.Textbox(
-                        label="Generated Code",
-                        lines=9,
-                        elem_classes=["gr-textbox", "output-textbox"]
-                    )
-                    generated_file = gr.File(
-                        label="Download Generated File",
-                        elem_classes=["gr-file"]
-                    )
-                    generated_message = gr.Markdown()
-
-            generate_button.click(
-                fn=generate_code,
-                inputs=[request_input, file_type_input],
-                outputs=[generated_code, generated_file, generated_message]
-            )
-
-demo.launch()
+if __name__ == "__main__":
+    app.launch()

@@ -90,8 +90,7 @@ Under the hood, three agents manage the workflow:
    source venv/bin/activate        # Windows: venv\Scripts\activate
    pip install -r requirements.txt
    ```
-
->>>>>>> 43c1ee1 (updated app_readme)
+   
 4. **Run the app**  
    ```bash
    python app.py
@@ -141,11 +140,5 @@ Under the hood, three agents manage the workflow:
   pip install gradio
   python app.py
   ```
-
-<<<<<<< HEAD
----
-
-Made with ♥ by the CodeMentor team. Contributions and issues are welcome on GitHub!
 =======
 
->>>>>>> 43c1ee1 (updated app_readme)

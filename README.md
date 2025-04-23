@@ -22,7 +22,7 @@ Under the hood, three agents manage the workflow:
 
 ---
 
-<<<<<<< HEAD
+
 ## 🖼️ Example Output
 
 <p align="center">

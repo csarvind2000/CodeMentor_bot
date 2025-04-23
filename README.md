@@ -140,5 +140,4 @@ Under the hood, three agents manage the workflow:
   pip install gradio
   python app.py
   ```
-=======
 

@@ -22,6 +22,7 @@ Under the hood, three agents manage the workflow:
 
 ---
 
+<<<<<<< HEAD
 ## 🖼️ Example Output
 
 <p align="center">
@@ -62,6 +63,35 @@ Under the hood, three agents manage the workflow:
    pip install -r requirements.txt
    ```
 
+=======
+## 🔧 Installation & Setup
+
+1. **Clone the repository**  
+   ```bash
+   git clone <repository-url>
+   cd <repo-folder>
+   ```
+
+2. **Install Ollama & pull the model**  
+   ```bash
+   # Install Ollama if needed
+   curl -fsSL https://ollama.com/install.sh | sh
+
+   # Pull the LLaMA 3 model (tagged :latest)
+   ollama pull llama3:latest
+
+   # Start the Ollama server
+   ollama serve
+   ```
+
+3. **Create a Python virtual environment & install dependencies**  
+   ```bash
+   python -m venv venv
+   source venv/bin/activate        # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+>>>>>>> 43c1ee1 (updated app_readme)
 4. **Run the app**  
    ```bash
    python app.py
@@ -112,6 +142,10 @@ Under the hood, three agents manage the workflow:
   python app.py
   ```
 
+<<<<<<< HEAD
 ---
 
 Made with ♥ by the CodeMentor team. Contributions and issues are welcome on GitHub!
+=======
+
+>>>>>>> 43c1ee1 (updated app_readme)
